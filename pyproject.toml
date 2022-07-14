@@ -10,10 +10,6 @@ authors = ["mathias <mathias@us2.ai>"]
 [tool.poetry.dependencies]
 python = "^3.8"
 bs4 = "^0.0.1"
-html5lib = "^1.1"
-lxml = "^4.9.0"
-uuid = "^1.30"
-shortuuid = "^1.0.9"
 googletrans = "4.0.0-rc1"
 
 [tool.poetry.dev-dependencies]
