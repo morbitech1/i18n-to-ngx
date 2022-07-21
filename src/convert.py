@@ -7,13 +7,15 @@ from bs4.formatter import HTMLFormatter
 import re
 from googletrans import Translator
 import json
+import translators as ts
 
 replacements = ['Us2Button', 'cdkDropListGroup', '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
 #  these can only replace after the first round else it causes half lowercase statement like cdkDropListdropped
-secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort', 'matRipple', 'matTableExporter']
+secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort', 'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons']
 remove_tags = [r'</img>', r'=""']
-#  'es', 'pt', 'ja', 'de', 'ms', 'ko', 'it', 'sv', 'da', 'no', 'th', 'vi', 'ar'
-langs = ['fr', 'zh-CN', 'zh-TW', 'nl']
+# 'es', 'pt', 'ja', 'de', 'ms', 'ko', 'it', 'sv', 'da', 'no', 'th', 'vi', 'ar'
+# 'fr', 'zh-CN', 'zh-TW', 'nl'
+langs = ['it']
     
 
 def convert_tag(path: Path, tag):
@@ -116,6 +118,28 @@ def format_spacing(term, trans):
     return trans
 
 
+# load manual translation back into json
+def load_manual_translation():
+    untranslated = {}
+    translated = {}
+    with open('./converted/untranslated.json') as untrans_file:
+        untranslated = json.load(untrans_file)
+    for lang in untranslated.keys():
+        current = {}
+        with open(f'./converted/{lang}.json') as lang_file:
+            current = json.load(lang_file)
+        terms = untranslated[lang].keys()
+        for t in terms:
+            try:
+                val = ts.bing(t, from_language='en', to_language=lang)
+                for loc in untranslated[lang][t]:
+                    current[loc][t] = val
+            except Exception as e:
+                print(e)
+        with open(f'./converted/{lang}.json', 'w') as output:
+            json.dump(current, output, ensure_ascii=False, indent=4, sort_keys=True)
+
+
 # compared json to en.json to find terms to translate and add
 def translate_files():
     translator = Translator()
@@ -141,22 +165,30 @@ def translate_files():
                         trans_term = translator.translate(val, dest=str(lang))
                         result[lang][key][id] = format_spacing(val, trans_term.text)
                     except Exception as e:
-                        print(e)
-                        if val in untranslated.keys():
-                            untranslated[val].append(lang)
-                        else:
-                            untranslated[val] = [lang]
+                        try:
+                            trans_term = ts.bing(val, from_language='en', to_language=lang)
+                            result[lang][key][id] = format_spacing(val, trans_term)
+                        except Exception as e:
+                            print(e)
+                            # add translation that can't work on google trans API
+                            if lang not in untranslated.keys():
+                                untranslated[lang] = {}
+                            if val not in untranslated[lang].keys():
+                                untranslated[lang][val] = [key + '.' + id]
+                            else:
+                                untranslated[lang][val].append(key + '.' + id)
         # save all translated
         with open(f'./converted/{lang_tag}.json', 'w') as output:
-            json.dump(result[lang], output, ensure_ascii=False)
+            json.dump(result[lang], output, ensure_ascii=False, indent=4, sort_keys=True)
     with open('./converted/untranslated.json', 'w') as output:
-            json.dump(untranslated, output, ensure_ascii=False)
+            json.dump(untranslated, output, ensure_ascii=False, indent=4, sort_keys=True)
 
 
+#  convert xlf files into json as well as replace i18n ids
 def convert_xlf_to_json(path: Path):
     paths = [path] if path.is_file() else list(path.glob('*.xlf'))
     for html_path in paths:
-        lang = html_path.stem.split('.')[-1]
+        lang = html_path.stem.split('.')[0]
         soup = BeautifulSoup(open(html_path), 'lxml')
         trans_units = soup.findAll('trans-unit')
         # load current terms
@@ -180,23 +212,20 @@ def convert_xlf_to_json(path: Path):
                                 result[loc] = {}
                             if val not in result[loc].values():
                                 result[loc][id] = val
-        with open(f'./converted/{lang}.json', 'w') as outfile:
-            json.dump(result, outfile, ensure_ascii=False)
+        i18n_id = load_i18n_id()
+        replace_i18n_id(i18n_id, result, lang)
 
 
-# after adding xlf json terms in, if there's some random uuid as id, need to remap to same id in html dynamic terms
-def convert_i18n_id():
+# extract from en.json the id to create readable key
+def extract_i18n_id():
     i18n_id = {}
-    result = {}
     with open(f'./converted/en.json') as lang_file:
         original = json.load(lang_file)
     for _, terms in original.items():
         for id, val in terms.items():
             # identify i18n uuid
-            if len(id) == 40:
-                if len(id.split(' ')) == 1 and len(id.split('_')) == 1 and len(id.split('-')) == 1:
-                    print(val)
-                    print('')
+            if len(id.split(' ')) == 1:
+                if len(id) == 40:
                     new_id = ''
                     val_list = val.split(' ')
                     if len(val_list) > 5:
@@ -204,26 +233,32 @@ def convert_i18n_id():
                     else:
                         new_id = val
                     i18n_id[id] = new_id
-    langs.append('en')
-    for lang in langs:
-        lang_tag = lang.replace('-', '_')
-        try:
-            with open(f'./converted/{lang_tag}.json') as lang_file:
-                result[lang] = json.load(lang_file)
-        except Exception as e:
-            result[lang] = {}
-        for key, terms in result[lang].items():
-            for id, new_id in i18n_id.items():
-                if id in result[lang][key].keys():
-                    result[lang][key][new_id] = result[lang][key].pop(id)
-        with open(f'./converted/{lang_tag}.json', 'w') as output:
-            json.dump(result[lang], output, ensure_ascii=False)
+    with open(f'./converted/i18n_id.json', 'w') as output:
+        json.dump(i18n_id, output, ensure_ascii=False, indent=4, sort_keys=True)
+    return i18n_id
+
+
+def load_i18n_id():
+    i18n_id = {}
+    with open(f'./converted/i18n_id.json') as i18n_file:
+        i18n_id = json.load(i18n_file)
+    return i18n_id
+
+
+# after adding xlf json terms in, if there's some random uuid as id, need to remap to same id in html dynamic terms
+def replace_i18n_id(i18n_id, terms, lang):
+    for key, _ in terms.items():
+        for id, new_id in i18n_id.items():
+            if id in terms[key].keys():
+                terms[key][new_id] = terms[key].pop(id)
+    with open(f'./converted/{lang}.json', 'w') as output:
+        json.dump(terms, output, ensure_ascii=False, indent=4, sort_keys=True)
+
 
 def main():
     parser = argparse.ArgumentParser('i18n-to-ngx')
     parser.add_argument('src', type=Path)
     args = parser.parse_args(sys.argv[1:])
     # convert_file(args.src)
-    # translate_files()
     # convert_xlf_to_json(args.src)
-    # convert_i18n_id()
+    # translate_files()
