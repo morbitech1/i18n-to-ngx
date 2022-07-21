@@ -9,14 +9,29 @@ from googletrans import Translator
 import json
 import translators as ts
 
-replacements = ['Us2Button', 'cdkDropListGroup', '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
+replacements = ['Us2Button', 'cdkDropListGroup',
+                '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
 #  these can only replace after the first round else it causes half lowercase statement like cdkDropListdropped
-secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort', 'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons']
+secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort',
+                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix']
 remove_tags = [r'</img>', r'=""']
-# 'es', 'pt', 'ja', 'de', 'ms', 'ko', 'it', 'sv', 'da', 'no', 'th', 'vi', 'ar'
-# 'fr', 'zh-CN', 'zh-TW', 'nl'
-langs = ['it']
-    
+langs = ['fr',
+         'nl',
+         'es',
+         'zh_TW',
+         'zh_CN',
+         'pt',
+         'ja',
+         'ms',
+         'de',
+         'ar',
+         'da',
+         'it',
+         'ko',
+         'no',
+         'sv',
+         'th',
+         'vi']
 
 def convert_tag(path: Path, tag):
     mods = {}
@@ -42,7 +57,8 @@ def convert_tag(path: Path, tag):
                         id = ' '.join(val_list[:5])
                     else:
                         id = val
-                mods[attr] = {'type': "[%s]" % (type_token), 'val': "'%s.%s' | translate : {default: '%s'}" % (loc.upper(), id, val)}
+                mods[attr] = {'type': "[%s]" % (
+                    type_token), 'val': "'%s.%s' | translate : {default: '%s'}" % (loc.upper(), id, val)}
             else:
                 val = reduce(lambda x, y: x + str(y), tag.contents)
                 val = str(val).strip()
@@ -52,7 +68,8 @@ def convert_tag(path: Path, tag):
                         id = ' '.join(val_list[:5])
                     else:
                         id = val
-                tag.string = "{{ '%s.%s' | translate : {default: '%s'} }}" % (loc.upper(), id, val)
+                tag.string = "{{ '%s.%s' | translate : {default: '%s'} }}" % (
+                    loc.upper(), id, val)
                 mods[attr] = {}
     for k, v in mods.items():
         del tag[k]
@@ -64,6 +81,8 @@ def convert_tag(path: Path, tag):
 # use regex since parser made all lowercase
 # replace lowercase attributes with original attributes
 # also need to remove =""
+
+
 def replace_attributes(path: Path, html):
     with open(path) as f:
         s = f.read()
@@ -88,6 +107,7 @@ def replace_attributes(path: Path, html):
             html = re.sub(reg, '', html)
         return html
 
+
 def write_html(path, soup):
     formatter = HTMLFormatter(indent=4)
     html = soup.prettify(formatter=formatter)
@@ -101,7 +121,8 @@ def convert_file(path: Path):
     paths = [path] if path.is_file() else list(path.rglob('*.html'))
     for html_path in paths:
         soup = BeautifulSoup(open(html_path), 'html.parser')
-        tags = soup.findAll(lambda tag: any(e.find('i18n') != -1 for e in tag.attrs.keys()))
+        tags = soup.findAll(lambda tag: any(
+            e.find('i18n') != -1 for e in tag.attrs.keys()))
         mods = {}
         for tag in tags:
             mods = convert_tag(html_path, tag)
@@ -110,6 +131,8 @@ def convert_file(path: Path):
             write_html(html_path, soup)
 
 # add back spacking base on original terms
+
+
 def format_spacing(term, trans):
     if term[0] == ' ':
         trans = ' ' + trans
@@ -122,7 +145,7 @@ def format_spacing(term, trans):
 def load_manual_translation():
     untranslated = {}
     translated = {}
-    with open('./converted/untranslated.json') as untrans_file:
+    with open('./assets/untranslated.json') as untrans_file:
         untranslated = json.load(untrans_file)
     for lang in untranslated.keys():
         current = {}
@@ -137,7 +160,16 @@ def load_manual_translation():
             except Exception as e:
                 print(e)
         with open(f'./converted/{lang}.json', 'w') as output:
-            json.dump(current, output, ensure_ascii=False, indent=4, sort_keys=True)
+            json.dump(current, output, ensure_ascii=False,
+                      indent=4, sort_keys=True)
+
+
+def translate_bing(val, lang):
+    if lang == 'zh-TW':
+        lang = 'zh-Hant'
+    if lang == 'zh':
+        lang = 'zh-Hans'
+    return ts.bing(val, from_language='en', to_language=lang)
 
 
 # compared json to en.json to find terms to translate and add
@@ -148,14 +180,13 @@ def translate_files():
     for lang in langs:
         lang_tag = lang.replace('-', '_')
         try:
-            with open(f'./converted/{lang_tag}.json') as lang_file:
+            with open(f'./converted/{lang}.json') as lang_file:
                 result[lang] = json.load(lang_file)
         except Exception as e:
             result[lang] = {}
     with open(f'./converted/en.json') as lang_file:
         original = json.load(lang_file)
     for lang in langs:
-        lang_tag = lang.replace('-', '_')
         for key, terms in original.items():
             for id, val in terms.items():
                 if key not in result[lang].keys():
@@ -163,11 +194,13 @@ def translate_files():
                 if id not in result[lang][key].keys():
                     try:
                         trans_term = translator.translate(val, dest=str(lang))
-                        result[lang][key][id] = format_spacing(val, trans_term.text)
+                        result[lang][key][id] = format_spacing(
+                            val, trans_term.text)
                     except Exception as e:
                         try:
-                            trans_term = ts.bing(val, from_language='en', to_language=lang)
-                            result[lang][key][id] = format_spacing(val, trans_term)
+                            trans_term = translate_bing(val, lang_tag)
+                            result[lang][key][id] = format_spacing(
+                                val, trans_term)
                         except Exception as e:
                             print(e)
                             # add translation that can't work on google trans API
@@ -178,10 +211,12 @@ def translate_files():
                             else:
                                 untranslated[lang][val].append(key + '.' + id)
         # save all translated
-        with open(f'./converted/{lang_tag}.json', 'w') as output:
-            json.dump(result[lang], output, ensure_ascii=False, indent=4, sort_keys=True)
-    with open('./converted/untranslated.json', 'w') as output:
-            json.dump(untranslated, output, ensure_ascii=False, indent=4, sort_keys=True)
+        with open(f'./converted/{lang}.json', 'w') as output:
+            json.dump(result[lang], output, ensure_ascii=False,
+                      indent=4, sort_keys=True)
+    with open('./assets/untranslated.json', 'w') as output:
+        json.dump(untranslated, output, ensure_ascii=False,
+                  indent=4, sort_keys=True)
 
 
 #  convert xlf files into json as well as replace i18n ids
@@ -205,9 +240,10 @@ def convert_xlf_to_json(path: Path):
                 if c.name == 'context-group':
                     for inner_c in c.contents:
                         if hasattr(inner_c, 'context-type') and inner_c.attrs['context-type'] == 'sourcefile':
-                            locs = filter(lambda x: x != 'component', reduce(lambda x, y: x + str(y), inner_c.contents).split('/')[-1].split('.')[:-1])
+                            locs = filter(lambda x: x != 'component', reduce(
+                                lambda x, y: x + str(y), inner_c.contents).split('/')[-1].split('.')[:-1])
                             loc = '.'.join(locs).upper()
-                            loc = loc.replace('-', '_')
+                            # loc = loc.replace('-', '_')
                             if loc not in result.keys():
                                 result[loc] = {}
                             if val not in result[loc].values():
@@ -233,14 +269,15 @@ def extract_i18n_id():
                     else:
                         new_id = val
                     i18n_id[id] = new_id
-    with open(f'./converted/i18n_id.json', 'w') as output:
-        json.dump(i18n_id, output, ensure_ascii=False, indent=4, sort_keys=True)
+    with open(f'./assets/i18n_id.json', 'w') as output:
+        json.dump(i18n_id, output, ensure_ascii=False,
+                  indent=4, sort_keys=True)
     return i18n_id
 
 
 def load_i18n_id():
     i18n_id = {}
-    with open(f'./converted/i18n_id.json') as i18n_file:
+    with open(f'./assets/i18n_id.json') as i18n_file:
         i18n_id = json.load(i18n_file)
     return i18n_id
 
