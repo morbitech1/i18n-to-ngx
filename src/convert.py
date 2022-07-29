@@ -8,30 +8,34 @@ import re
 from googletrans import Translator
 import json
 import translators as ts
+import datetime
+import csv
 
 replacements = ['Us2Button', 'cdkDropListGroup',
                 '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
 #  these can only replace after the first round else it causes half lowercase statement like cdkDropListdropped
 secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort',
-                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix']
+                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix', 'matTooltipPosition']
 remove_tags = [r'</img>', r'=""']
-langs = ['fr',
-         'nl',
-         'es',
-         'zh_TW',
-         'zh_CN',
-         'pt',
-         'ja',
-         'ms',
-         'de',
-         'ar',
-         'da',
-         'it',
-         'ko',
-         'no',
-         'sv',
-         'th',
-         'vi']
+langs = [
+    'en',
+    'fr',
+    'nl',
+    'es',
+    'zh-TW',
+    'zh-CN',
+    'pt',
+    'ja',
+    'ms',
+    'de',
+    'ar',
+    'da',
+    'it',
+    'ko',
+    'no',
+    'sv',
+    'th',
+    'vi']
 
 def convert_tag(path: Path, tag):
     mods = {}
@@ -131,8 +135,6 @@ def convert_file(path: Path):
             write_html(html_path, soup)
 
 # add back spacking base on original terms
-
-
 def format_spacing(term, trans):
     if term[0] == ' ':
         trans = ' ' + trans
@@ -243,7 +245,6 @@ def convert_xlf_to_json(path: Path):
                             locs = filter(lambda x: x != 'component', reduce(
                                 lambda x, y: x + str(y), inner_c.contents).split('/')[-1].split('.')[:-1])
                             loc = '.'.join(locs).upper()
-                            # loc = loc.replace('-', '_')
                             if loc not in result.keys():
                                 result[loc] = {}
                             if val not in result[loc].values():
@@ -292,10 +293,40 @@ def replace_i18n_id(i18n_id, terms, lang):
         json.dump(terms, output, ensure_ascii=False, indent=4, sort_keys=True)
 
 
+# reformat json into suitable format for csv
+def json_reformat(data):
+    ct = datetime.datetime.now()
+    result = []
+    for loc in data.keys():
+        for id in data[loc].keys():
+            result.append({'Location': loc, 'Name': id, 'Value': data[loc][id], 'Timestamp': ct})
+    return result
+
+
+#  convert json into csv for notion
+def json_to_csv():
+    for lang in langs:
+        with open(f'./converted/{lang}.json') as lang_file:
+            data = json.load(lang_file)
+
+        data = json_reformat(data)
+        data_file = open(f'./csv/{lang}.csv', 'w', newline='')
+        csv_writer = csv.writer(data_file)
+
+        count = 0
+        for data in data:
+            if count == 0:
+                header = data.keys()
+                csv_writer.writerow(header)
+                count += 1
+            csv_writer.writerow(data.values())
+        data_file.close()
+
 def main():
     parser = argparse.ArgumentParser('i18n-to-ngx')
     parser.add_argument('src', type=Path)
     args = parser.parse_args(sys.argv[1:])
     # convert_file(args.src)
     # convert_xlf_to_json(args.src)
-    # translate_files()
+    translate_files()
+    # json_to_csv()
