@@ -8,42 +8,30 @@ import re
 from googletrans import Translator
 import json
 import translators as ts
-import datetime
-import csv
-
-token = 'da8c0c1f2887091b614b01a5f924196c4f8441c1205b6c67c22aa4896c1b5c59e4ba8575a6017a279c65a28168c6111e1f4d6cd3f32071599286d1e56a9834559b38a97f2d412eedcc1f4e6c062f'
-database_id = 'ba0c39b6709d463fa894c8d854b2a2da'
-internal = 'a10ed6a472744a0eacd2e9c2bbf67614'
-internal_token = 'secret_UjLNFd9pawGcCS5YibXymYwFOgTqDMxbOZQqKf8G2Sg'
-
-# Obtain the `token_v2` value by inspecting your browser cookies on a logged-in (non-guest) session on Notion.so
-# client = NotionClient(token_v2=token)
 
 replacements = ['Us2Button', 'cdkDropListGroup',
                 '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
 #  these can only replace after the first round else it causes half lowercase statement like cdkDropListdropped
 secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort',
-                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix', 'matTooltipPosition']
+                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix']
 remove_tags = [r'</img>', r'=""']
-langs = [
-    'en',
-    'fr',
-    'nl',
-    'es',
-    'zh-TW',
-    'zh-CN',
-    'pt',
-    'ja',
-    'ms',
-    'de',
-    'ar',
-    'da',
-    'it',
-    'ko',
-    'no',
-    'sv',
-    'th',
-    'vi']
+langs = ['fr',
+         'nl',
+         'es',
+         'zh_TW',
+         'zh_CN',
+         'pt',
+         'ja',
+         'ms',
+         'de',
+         'ar',
+         'da',
+         'it',
+         'ko',
+         'no',
+         'sv',
+         'th',
+         'vi']
 
 def convert_tag(path: Path, tag):
     mods = {}
@@ -143,6 +131,8 @@ def convert_file(path: Path):
             write_html(html_path, soup)
 
 # add back spacking base on original terms
+
+
 def format_spacing(term, trans):
     if term[0] == ' ':
         trans = ' ' + trans
@@ -253,6 +243,7 @@ def convert_xlf_to_json(path: Path):
                             locs = filter(lambda x: x != 'component', reduce(
                                 lambda x, y: x + str(y), inner_c.contents).split('/')[-1].split('.')[:-1])
                             loc = '.'.join(locs).upper()
+                            # loc = loc.replace('-', '_')
                             if loc not in result.keys():
                                 result[loc] = {}
                             if val not in result[loc].values():
@@ -301,55 +292,10 @@ def replace_i18n_id(i18n_id, terms, lang):
         json.dump(terms, output, ensure_ascii=False, indent=4, sort_keys=True)
 
 
-# reformat json into suitable format for csv
-def json_reformat(data):
-    ct = datetime.datetime.now()
-    result = []
-    for loc in data.keys():
-        for id in data[loc].keys():
-            result.append({'Location': loc, 'Name': id, 'Value': data[loc][id], 'Timestamp': ct})
-    return result
-
-
-#  convert json into csv for notion
-def json_to_csv():
-    for lang in langs:
-        with open(f'./converted/{lang}.json') as lang_file:
-            data = json.load(lang_file)
-
-        data = json_reformat(data)
-        data_file = open(f'./csv/{lang}.csv', 'w', newline='')
-        csv_writer = csv.writer(data_file)
-
-        count = 0
-        for data in data:
-            if count == 0:
-                header = data.keys()
-                csv_writer.writerow(header)
-                count += 1
-            csv_writer.writerow(data.values())
-        data_file.close()
-
-# def access_notion():
-    # Access a database using the URL of the database page or the inline block
-    # cv = client.get_collection_view("https://www.notion.so/a10ed6a472744a0eacd2e9c2bbf67614")
-    # collection = client.get_collection(f"{internal}")
-    # page = client.get_block("https://www.notion.so/us2ai/ba0c39b6709d463fa894c8d854b2a2da?v=5b026b70ab42481897930fcd27abe8a4")
-    # print("The old title is:", page.title)
-    # url = f'https://api.notion.com/v1/databases/{internal}/query'
-    # r = requests.post(url, headers={
-    #     "Authorization": f"Bearer {internal_token}",
-    #     "Notion-Version": "2021–08–16"
-    # })
-    # result_dict = r.json()
-    # movie_list_result = result_dict['results']
-    # print(movie_list_result)
-
 def main():
     parser = argparse.ArgumentParser('i18n-to-ngx')
     parser.add_argument('src', type=Path)
     args = parser.parse_args(sys.argv[1:])
     # convert_file(args.src)
     # convert_xlf_to_json(args.src)
-    translate_files()
-    # json_to_csv()
+    # translate_files()
