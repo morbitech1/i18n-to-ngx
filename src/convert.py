@@ -1,4 +1,5 @@
 import argparse
+import io
 import sys
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -10,6 +11,18 @@ import json
 import translators as ts
 import datetime
 import csv
+
+import os.path
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from apiclient.http import MediaFileUpload
+from googleapiclient.http import MediaIoBaseDownload
+import pandas as pd
+
+SCOPES = ['https://www.googleapis.com/auth/drive']
 
 replacements = ['Us2Button', 'cdkDropListGroup',
                 '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
@@ -85,8 +98,6 @@ def convert_tag(path: Path, tag):
 # use regex since parser made all lowercase
 # replace lowercase attributes with original attributes
 # also need to remove =""
-
-
 def replace_attributes(path: Path, html):
     with open(path) as f:
         s = f.read()
@@ -137,16 +148,17 @@ def convert_file(path: Path):
 # add back spacking base on original terms
 def format_spacing(term, trans):
     if term[0] == ' ':
-        trans = ' ' + trans
+        if trans[0] != ' ':
+            trans = ' ' + trans
     if term[-1] == ' ':
-        trans += ' '
+        if trans[-1] != ' ':
+            trans += ' '
     return trans
 
 
 # load manual translation back into json
 def load_manual_translation():
     untranslated = {}
-    translated = {}
     with open('./assets/untranslated.json') as untrans_file:
         untranslated = json.load(untrans_file)
     for lang in untranslated.keys():
@@ -303,7 +315,7 @@ def json_reformat(data):
     return result
 
 
-#  convert json into csv for notion
+#  convert json into csv
 def json_to_csv():
     for lang in langs:
         with open(f'./converted/{lang}.json') as lang_file:
@@ -322,11 +334,136 @@ def json_to_csv():
             csv_writer.writerow(data.values())
         data_file.close()
 
+
+# setup credential for google drive access, requires token.json
+def setup():
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+    return creds
+
+
+#  get all file id that needs to be updated in translation
+def query(creds, folder_id):
+    try:
+        service = build('drive', 'v3', credentials=creds)
+
+        # Call the Drive v3 API
+        results = service.files().list(
+            q=f"mimeType='application/vnd.google-apps.spreadsheet' and {folder_id} in parents and trashed = false",
+            fields="nextPageToken, files(id, name)").execute()
+        items = results.get('files', [])
+
+        if not items:
+            print('No files found.')
+            return {}
+        return items
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+
+
+# first time upload language file
+def upload(folder_id):
+    creds = setup()
+    try:
+        service = build('drive', 'v3', credentials=creds)
+        for lang in langs:
+            file_metadata = {
+                'title': lang,
+                'mimeType': 'application/vnd.google-apps.spreadsheet',
+                'name': lang,
+                'parents': [folder_id]
+            }
+            media = MediaFileUpload(f'./csv/{lang}.csv', mimetype='text/csv',
+                                    resumable=True)
+            # pylint: disable=maybe-no-member
+            file = service.files().create(body=file_metadata, media_body=media,
+                                        fields='id').execute()
+            print(F'File with ID: "{file.get("id")}" has been uploaded.')
+
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+
+
+# update google sheets
+def update(folder_id):
+    #  update csv for upload
+    json_to_csv()
+    creds = setup()
+    files = query(creds, folder_id)
+    try:
+        service = build('drive', 'v3', credentials=creds)
+        for file in files:
+            media = MediaFileUpload('./csv/' + file['name'] + '.csv', mimetype='text/csv',
+                                    resumable=True)
+            file = service.files().update(fileId=file['id'], media_body=media).execute()
+            print(F'File: "{file.get("id")}" has been updated.')
+
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+
+
+# download from google drive and convert back into json
+def download(folder_id):
+    creds = setup()
+    files = query(creds, folder_id)
+    
+    try:
+        # create drive api client
+        service = build('drive', 'v3', credentials=creds)
+        
+        for file_id in files:
+            request = service.files().export_media(fileId=file_id['id'], mimeType='text/csv')
+            file = io.BytesIO()
+            downloader = MediaIoBaseDownload(file, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+                print(f'Download {int(status.progress() * 100)}.')
+            # save csv for update
+            file.seek(0)
+            df = pd.read_csv(file)
+            df.to_csv('./csv/' + file_id['name'] + '.csv', index=False)
+            # convert back into json
+            updated = {}
+            with open('./converted/' + file_id['name'] + '.json') as lang_file:
+                current = json.load(lang_file)
+            for _, row in df.iterrows():
+                if row['Location'] not in updated.keys():
+                    updated[row['Location']] = {}
+                if row['Name'] not in updated[row['Location']].keys():
+                    updated[row['Location']][row['Name']] = format_spacing(current[row['Location']][row['Name']], row['Value'])
+            with open('./converted/' + file_id['name'] + '.json', 'w') as output:
+                json.dump(updated, output, ensure_ascii=False, indent=4, sort_keys=True)
+    except HttpError as error:
+        print(F'An error occurred: {error}')
+        file = None
+
+
 def main():
     parser = argparse.ArgumentParser('i18n-to-ngx')
     parser.add_argument('src', type=Path)
     args = parser.parse_args(sys.argv[1:])
+    
+    # path to xlf files as args
     # convert_file(args.src)
     # convert_xlf_to_json(args.src)
     translate_files()
-    # json_to_csv()
+    
+    # folder_id as args 
+    # update(args.src)
+    # download(args.src)
