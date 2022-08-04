@@ -364,7 +364,7 @@ def query(creds, folder_id):
 
         # Call the Drive v3 API
         results = service.files().list(
-            q=f"mimeType='application/vnd.google-apps.spreadsheet' and {folder_id} in parents and trashed = false",
+            q=f"mimeType='application/vnd.google-apps.spreadsheet' and '{folder_id}' in parents and trashed = false",
             fields="nextPageToken, files(id, name)").execute()
         items = results.get('files', [])
 
@@ -390,11 +390,9 @@ def upload(folder_id):
             }
             media = MediaFileUpload(f'./csv/{lang}.csv', mimetype='text/csv',
                                     resumable=True)
-            # pylint: disable=maybe-no-member
             file = service.files().create(body=file_metadata, media_body=media,
                                         fields='id').execute()
             print(F'File with ID: "{file.get("id")}" has been uploaded.')
-
     except HttpError as error:
         print(f'An error occurred: {error}')
 
@@ -408,11 +406,9 @@ def update(folder_id):
     try:
         service = build('drive', 'v3', credentials=creds)
         for file in files:
-            media = MediaFileUpload('./csv/' + file['name'] + '.csv', mimetype='text/csv',
-                                    resumable=True)
+            media = MediaFileUpload('./csv/' + file['name'] + '.csv', mimetype='text/csv', resumable=True)
             file = service.files().update(fileId=file['id'], media_body=media).execute()
             print(F'File: "{file.get("id")}" has been updated.')
-
     except HttpError as error:
         print(f'An error occurred: {error}')
 
@@ -424,8 +420,7 @@ def download(folder_id):
     
     try:
         # create drive api client
-        service = build('drive', 'v3', credentials=creds)
-        
+        service = build('drive', 'v3', credentials=creds)    
         for file_id in files:
             request = service.files().export_media(fileId=file_id['id'], mimeType='text/csv')
             file = io.BytesIO()
@@ -462,8 +457,8 @@ def main():
     # path to xlf files as args
     # convert_file(args.src)
     # convert_xlf_to_json(args.src)
-    translate_files()
+    # translate_files()
     
     # folder_id as args 
-    # update(args.src)
-    # download(args.src)
+    # update(args.src.name)
+    # download(args.src.name)
