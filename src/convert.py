@@ -192,7 +192,6 @@ def translate_files():
     result = {}
     untranslated = {}
     for lang in langs:
-        lang_tag = lang.replace('-', '_')
         try:
             with open(f'./converted/{lang}.json') as lang_file:
                 result[lang] = json.load(lang_file)
@@ -212,6 +211,7 @@ def translate_files():
                             val, trans_term.text)
                     except Exception as e:
                         try:
+                            lang_tag = lang.replace('-', '_')
                             trans_term = translate_bing(val, lang_tag)
                             result[lang][key][id] = format_spacing(
                                 val, trans_term)
@@ -231,6 +231,25 @@ def translate_files():
     with open('./assets/untranslated.json', 'w') as output:
         json.dump(untranslated, output, ensure_ascii=False,
                   indent=4, sort_keys=True)
+
+
+# remove a translation term across json files
+def remove_translation(location, term):
+    result = {}
+    for lang in langs:
+        try:
+            with open(f'./converted/{lang}.json') as lang_file:
+                result[lang] = json.load(lang_file)
+        except Exception as _:
+            result[lang] = {}
+        if location in result.keys() and term in result[location].keys():
+            del result[location][term]
+        else:
+            print('Key does not exist')
+        # save all translated
+        with open(f'./converted/{lang}.json', 'w') as output:
+            json.dump(result[lang], output, ensure_ascii=False,
+                      indent=4, sort_keys=True)
 
 
 #  convert xlf files into json as well as replace i18n ids
@@ -417,7 +436,6 @@ def update(folder_id):
 def download(folder_id):
     creds = setup()
     files = query(creds, folder_id)
-    
     try:
         # create drive api client
         service = build('drive', 'v3', credentials=creds)    
