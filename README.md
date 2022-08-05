@@ -7,11 +7,11 @@
 - Lastly, add language to webpack comment in language service on our app, ensure the locale for number and dates works on the application
 
 ### Update translations for current languages
-- Ensure all the jsons are into converted folder
+- Ensure all the jsons are into converted folder (if not create a converted folder)
 - Add new term in en.json
 - Use translate_file function in script to update other language json
 
 ### Removing translation terms
-- Ensure all the jsons are into converted folder
+- Ensure all the jsons are into converted folder (if not create a converted folder)
 - Create a list of translation terms to remove: [[location, id]] format
 - Use the remove_translation(terms) function
