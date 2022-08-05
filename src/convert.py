@@ -233,8 +233,9 @@ def translate_files():
                   indent=4, sort_keys=True)
 
 
-# remove a translation term across json files
-def remove_translation(location, term):
+# remove translation terms across json files
+# terms is a list of paired values: [[location, id]]
+def remove_translation(terms):
     result = {}
     for lang in langs:
         try:
@@ -242,14 +243,16 @@ def remove_translation(location, term):
                 result[lang] = json.load(lang_file)
         except Exception as _:
             result[lang] = {}
-        if location in result.keys() and term in result[location].keys():
-            del result[location][term]
-        else:
-            print('Key does not exist')
+        for term in terms:
+            [location, id] = term
+            if location in result.keys() and id in result[location].keys():
+                del result[location][id]
+            else:
+                print(f'Key does not exist: {location} {id}')
         # save all translated
         with open(f'./converted/{lang}.json', 'w') as output:
             json.dump(result[lang], output, ensure_ascii=False,
-                      indent=4, sort_keys=True)
+                    indent=4, sort_keys=True)
 
 
 #  convert xlf files into json as well as replace i18n ids
