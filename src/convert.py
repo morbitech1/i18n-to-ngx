@@ -145,6 +145,7 @@ def convert_file(path: Path):
         if len(mods):
             write_html(html_path, soup)
 
+
 # add back spacking base on original terms
 def format_spacing(term, trans):
     if term[0] == ' ':
@@ -338,8 +339,8 @@ def json_reformat(data):
 
 
 #  convert json into csv
-def json_to_csv():
-    for lang in langs:
+def json_to_csv(lang_input):
+    for lang in lang_input:
         with open(f'./converted/{lang}.json') as lang_file:
             data = json.load(lang_file)
 
@@ -398,12 +399,13 @@ def query(creds, folder_id):
         print(f'An error occurred: {error}')
 
 
-# first time upload language file
-def upload(folder_id):
+# first time upload language file - do it once only when new language added
+# lang_input: list of lang to upload
+def upload(folder_id, lang_input):
     creds = setup()
     try:
         service = build('drive', 'v3', credentials=creds)
-        for lang in langs:
+        for lang in lang_input:
             file_metadata = {
                 'title': lang,
                 'mimeType': 'application/vnd.google-apps.spreadsheet',
@@ -419,10 +421,8 @@ def upload(folder_id):
         print(f'An error occurred: {error}')
 
 
-# update google sheets
+# update all google sheets in translation google drive
 def update(folder_id):
-    #  update csv for upload
-    json_to_csv()
     creds = setup()
     files = query(creds, folder_id)
     try:
@@ -481,5 +481,6 @@ def main():
     # translate_files()
     
     # folder_id as args 
+    # json_to_csv([])
     # update(args.src.name)
     # download(args.src.name)
