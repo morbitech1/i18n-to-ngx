@@ -194,11 +194,11 @@ def translate_files():
     untranslated = {}
     for lang in langs:
         try:
-            with open(f'./converted/{lang}.json') as lang_file:
+            with open(f'./converted/{lang}.json', encoding='utf-8') as lang_file:
                 result[lang] = json.load(lang_file)
         except Exception as e:
             result[lang] = {}
-    with open(f'./converted/en.json') as lang_file:
+    with open(f'./converted/en.json', encoding='utf-8') as lang_file:
         original = json.load(lang_file)
     for lang in langs:
         for key, terms in original.items():
@@ -226,10 +226,10 @@ def translate_files():
                             else:
                                 untranslated[lang][val].append(key + '.' + id)
         # save all translated
-        with open(f'./converted/{lang}.json', 'w') as output:
+        with open(f'./converted/{lang}.json', 'w', encoding='utf-8') as output:
             json.dump(result[lang], output, ensure_ascii=False,
                       indent=4, sort_keys=True)
-    with open('./assets/untranslated.json', 'w') as output:
+    with open('./assets/untranslated.json', 'w', encoding='utf-8') as output:
         json.dump(untranslated, output, ensure_ascii=False,
                   indent=4, sort_keys=True)
 
