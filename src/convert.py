@@ -187,6 +187,24 @@ def translate_bing(val, lang):
     return ts.bing(val, from_language='en', to_language=lang)
 
 
+# escape template variables
+def escape(val):
+    mapping = {}
+    def count_repl(mobj, i=[0]):
+        i[0] += 1
+        to = f'_{i[0]}_'
+        mapping[to] = mobj[0]
+        return to
+    return re.sub(r'({{.*?}})', count_repl, val), mapping
+
+
+# unescape template variables
+def unescape(val, mapping):
+    for k, v in mapping.items():
+        val = val.replace(k, v)
+    return val
+
+
 # compared json to en.json to find terms to translate and add
 def translate_files():
     translator = Translator()
@@ -207,15 +225,17 @@ def translate_files():
                     result[lang][key] = {}
                 if id not in result[lang][key].keys():
                     try:
-                        trans_term = translator.translate(val, dest=str(lang))
-                        result[lang][key][id] = format_spacing(
-                            val, trans_term.text)
+                        escaped_val, mapping = escape(val)
+                        trans_term = translator.translate(escaped_val, dest=str(lang))
+                        trans_term = format_spacing(val, trans_term.text)
+                        trans_term = unescape(trans_term, mapping)
+                        result[lang][key][id] = trans_term
                     except Exception as e:
                         try:
                             lang_tag = lang.replace('-', '_')
-                            trans_term = translate_bing(val, lang_tag)
-                            result[lang][key][id] = format_spacing(
-                                val, trans_term)
+                            trans_term = translate_bing(escaped_val, lang_tag)
+                            result[lang][key][id] = format_spacing(val, trans_term)
+                            trans_term = unescape(trans_term, mapping)
                         except Exception as e:
                             print(e)
                             # add translation that can't work on google trans API
@@ -484,3 +504,5 @@ def main():
     # json_to_csv([])
     # update(args.src.name)
     # download(args.src.name)
+
+translate_files()
