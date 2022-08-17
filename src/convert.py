@@ -234,8 +234,8 @@ def translate_files():
                         try:
                             lang_tag = lang.replace('-', '_')
                             trans_term = translate_bing(escaped_val, lang_tag)
-                            result[lang][key][id] = format_spacing(val, trans_term)
-                            trans_term = unescape(trans_term, mapping)
+                            trans_term = format_spacing(val, trans_term)
+                            result[lang][key][id] = unescape(trans_term, mapping)
                         except Exception as e:
                             print(e)
                             # add translation that can't work on google trans API
