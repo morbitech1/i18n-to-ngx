@@ -214,11 +214,11 @@ def translate_files():
     untranslated = {}
     for lang in langs:
         try:
-            with open(f'./converted/{lang}.json') as lang_file:
+            with open(f'./converted/{lang}.json', encoding='utf-8') as lang_file:
                 result[lang] = json.load(lang_file)
         except Exception as e:
             result[lang] = {}
-    with open(f'./converted/en.json') as lang_file:
+    with open(f'./converted/en.json', encoding='utf-8') as lang_file:
         original = json.load(lang_file)
     for lang in langs:
         print(f'------- Translating {lang} -------')
@@ -266,11 +266,11 @@ def translate_files():
                 for loc in loc_diff:
                     del result[lang][loc]
         # save all translated
-        with open(f'./converted/{lang}.json', 'w') as output:
+        with open(f'./converted/{lang}.json', 'w', encoding='utf-8') as output:
             json.dump(result[lang], output, ensure_ascii=False,
                       indent=4, sort_keys=True)
     print(f'------- All translations completed -------')
-    with open('./assets/untranslated.json', 'w') as output:
+    with open('./assets/untranslated.json', 'w', encoding='utf-8') as output:
         json.dump(untranslated, output, ensure_ascii=False,
                   indent=4, sort_keys=True)
 
@@ -582,3 +582,4 @@ def main():
     # upload(args.src.name, langs)
     # update(args.src.name)
     download(args.src.name)
+

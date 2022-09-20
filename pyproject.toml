@@ -11,6 +11,12 @@ authors = ["mathias <mathias@us2.ai>"]
 python = "^3.8"
 bs4 = "^0.0.1"
 googletrans = "4.0.0-rc1"
+beautifulsoup4 = "^4.11.1"
+translators = "^5.4.2"
+google-auth = "^2.10.0"
+google-auth-oauthlib = "^0.5.2"
+google-api-python-client = "^2.56.0"
+pandas = "^1.4.3"
 
 [tool.poetry.dev-dependencies]
 
@@ -20,3 +26,4 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 convert = "src:main"
+translate_files = "src.convert:translate_files"
