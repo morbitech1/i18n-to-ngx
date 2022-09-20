@@ -5,7 +5,7 @@ packages = [
 ]
 version = "0.1.0"
 description = ""
-authors = ["mathias <mathias@us2.ai>"]
+authors = ["rachael <rtay989@gmail.com>", "mathias <mathias@us2.ai>"]
 
 [tool.poetry.dependencies]
 python = "^3.8"
@@ -13,9 +13,11 @@ bs4 = "^0.0.1"
 googletrans = "4.0.0-rc1"
 beautifulsoup4 = "^4.11.1"
 translators = "^5.4.2"
-google-auth = "^2.10.0"
+lxml = "^4.9.1"
+translate-api = "^4.9.5"
+google-api-python-client = "^2.55.0"
+google-auth-httplib2 = "^0.1.0"
 google-auth-oauthlib = "^0.5.2"
-google-api-python-client = "^2.56.0"
 pandas = "^1.4.3"
 
 [tool.poetry.dev-dependencies]

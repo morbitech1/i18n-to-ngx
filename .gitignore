@@ -42,3 +42,9 @@ pip-wheel-metadata
 poetry/core/*
 
 converted/*
+csv/*
+src/i18n/*
+token.json
+i18n_id.json
+settings.yaml
+client_secrets.json
