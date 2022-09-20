@@ -27,28 +27,29 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 replacements = ['Us2Button', 'cdkDropListGroup',
                 '[matTooltipClass]', '#relatedFindingRow', '[matTooltipPosition]']
 #  these can only replace after the first round else it causes half lowercase statement like cdkDropListdropped
-secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort',
-                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 'matSuffix', 'matTooltipPosition']
+secondary_replacements = ['cdkDrag', 'cdkDropList', 'ngModel', 'matInput', 'matSort', 'ngDefaultControl',
+                          'matRipple', 'matTableExporter', 'matSuffix', 'matTooltipClass', 'showFirstLastButtons', 
+                          'matSuffix', 'matTooltipPosition']
 remove_tags = [r'</img>', r'=""']
-langs = [
-    'en',
-    'fr',
-    'nl',
-    'es',
-    'zh-TW',
-    'zh-CN',
-    'pt',
-    'ja',
-    'ms',
-    'de',
-    'ar',
-    'da',
-    'it',
-    'ko',
-    'no',
-    'sv',
-    'th',
-    'vi']
+langs = ['en',
+        'fr',
+        'nl',
+        'es',
+        'zh-TW',
+        'zh-CN',
+        'pt',
+        'ja',
+        'ms',
+        'de',
+        'ar',
+        'da',
+        'it',
+        'ko',
+        'no',
+        'sv',
+        'th',
+        'vi',
+        'ru']
 
 def convert_tag(path: Path, tag):
     mods = {}
@@ -187,7 +188,26 @@ def translate_bing(val, lang):
     return ts.bing(val, from_language='en', to_language=lang)
 
 
+# escape template variables
+def escape(val):
+    mapping = {}
+    def count_repl(mobj, i=[0]):
+        i[0] += 1
+        to = f'_{i[0]}_'
+        mapping[to] = mobj[0]
+        return to
+    return re.sub(r'({{.*?}})', count_repl, val), mapping
+
+
+# unescape template variables
+def unescape(val, mapping):
+    for k, v in mapping.items():
+        val = val.replace(k, v)
+    return val
+
+
 # compared json to en.json to find terms to translate and add
+# clean up old locations from xlf that no longer exist in the new one
 def translate_files():
     translator = Translator()
     result = {}
@@ -201,23 +221,30 @@ def translate_files():
     with open(f'./converted/en.json') as lang_file:
         original = json.load(lang_file)
     for lang in langs:
+        print(f'------- Translating {lang} -------')
+        # TODO: use set to find differences - not in en (remove) vs in en (add)
         for key, terms in original.items():
             for id, val in terms.items():
                 if key not in result[lang].keys():
                     result[lang][key] = {}
+                if key not in original.keys():
+                    print(f'Location not in en: {key}')
+                    continue
                 if id not in result[lang][key].keys():
                     try:
-                        trans_term = translator.translate(val, dest=str(lang))
-                        result[lang][key][id] = format_spacing(
-                            val, trans_term.text)
+                        escaped_val, mapping = escape(val)
+                        trans_term = translator.translate(escaped_val, dest=str(lang))
+                        trans_term = format_spacing(val, trans_term.text)
+                        trans_term = unescape(trans_term, mapping)
+                        result[lang][key][id] = trans_term
                     except Exception as e:
                         try:
                             lang_tag = lang.replace('-', '_')
-                            trans_term = translate_bing(val, lang_tag)
-                            result[lang][key][id] = format_spacing(
-                                val, trans_term)
+                            trans_term = translate_bing(escaped_val, lang_tag)
+                            trans_term = format_spacing(val, trans_term)
+                            result[lang][key][id] = unescape(trans_term, mapping)
                         except Exception as e:
-                            print(e)
+                            print(f'Google translation unable to add, using bing instead: {e}')
                             # add translation that can't work on google trans API
                             if lang not in untranslated.keys():
                                 untranslated[lang] = {}
@@ -225,14 +252,49 @@ def translate_files():
                                 untranslated[lang][val] = [key + '.' + id]
                             else:
                                 untranslated[lang][val].append(key + '.' + id)
+            # clean up terms that are not in en.json
+            diff = result[lang][key].keys() - original[key].keys()
+            if diff:
+                for k in diff:
+                    del result[lang][key][k]
+                print(f'Difference: {diff}')
+        print(f'------- {lang} translation complete -------')
+        # remove loc that are not in original
+        if lang != 'en':
+            loc_diff = result[lang].keys() - original.keys()
+            if loc_diff:
+                for loc in loc_diff:
+                    del result[lang][loc]
         # save all translated
         with open(f'./converted/{lang}.json', 'w') as output:
             json.dump(result[lang], output, ensure_ascii=False,
                       indent=4, sort_keys=True)
+    print(f'------- All translations completed -------')
     with open('./assets/untranslated.json', 'w') as output:
         json.dump(untranslated, output, ensure_ascii=False,
                   indent=4, sort_keys=True)
 
+
+# clean up for any extra terms across the language files, using en as the base
+def clean_up():
+    result = {}
+    with open(f'./converted/en.json') as lang_file:
+        original = json.load(lang_file)
+    for lang in langs:
+        try:
+            with open(f'./converted/{lang}.json') as lang_file:
+                result[lang] = json.load(lang_file)
+        except Exception as e:
+            result[lang] = {}
+        for key, terms in result.items():
+            for id, _ in terms.items():
+                # clean up terms that are not in en.json
+                diff = result[lang][key].keys() - original[key].keys()
+                if diff:
+                    for k in diff:
+                        print(f'Difference: {k}')
+                        del result[lang][key][k]
+        
 
 # remove translation terms across json files
 # terms is a list of paired values: [[location, id]]
@@ -246,10 +308,13 @@ def remove_translation(terms):
             result[lang] = {}
         for term in terms:
             [location, id] = term
-            if location in result.keys() and id in result[location].keys():
-                del result[location][id]
+            if location in result[lang].keys() and id in result[lang][location].keys():
+                del result[lang][location][id]
             else:
                 print(f'Key does not exist: {location} {id}')
+        # when removing all terms from location, clean up empty dict
+        if len(result[lang][location]) == 0:
+            del result[lang][location]
         # save all translated
         with open(f'./converted/{lang}.json', 'w') as output:
             json.dump(result[lang], output, ensure_ascii=False,
@@ -280,6 +345,7 @@ def convert_xlf_to_json(path: Path):
                             locs = filter(lambda x: x != 'component', reduce(
                                 lambda x, y: x + str(y), inner_c.contents).split('/')[-1].split('.')[:-1])
                             loc = '.'.join(locs).upper()
+                            loc = loc.replace('-', '_')
                             if loc not in result.keys():
                                 result[loc] = {}
                             if val not in result[loc].values():
@@ -329,12 +395,24 @@ def replace_i18n_id(i18n_id, terms, lang):
 
 
 # reformat json into suitable format for csv
-def json_reformat(data):
+def json_reformat(data, lang):
     ct = datetime.datetime.now()
+    with open(f'./converted/en.json') as lang_file:
+        original = json.load(lang_file)
+    df = pd.read_csv(f'./csv/{lang}.csv', delimiter=',')
     result = []
     for loc in data.keys():
         for id in data[loc].keys():
-            result.append({'Location': loc, 'Name': id, 'Value': data[loc][id], 'Timestamp': ct})
+            try:
+                orig_term = original[loc][id] if id in original[loc] else '-nil-'
+            except Exception as e:
+                # when the loc does not exist in en.json
+                print(f'Key not in en: {loc}')
+                orig_term = '-nil-'
+            row = df.loc[(df['Location'] == loc) & (df['Name'] == id), 'Timestamp']
+            # if new terms added, new timestamp
+            curr_time = row.values[0] if not row.empty else ct
+            result.append({'Location': loc, 'Name': id, 'English Value': orig_term, 'Value': data[loc][id], 'Timestamp': curr_time})
     return result
 
 
@@ -343,11 +421,10 @@ def json_to_csv(lang_input):
     for lang in lang_input:
         with open(f'./converted/{lang}.json') as lang_file:
             data = json.load(lang_file)
-
-        data = json_reformat(data)
+        data = json_reformat(data, lang)
         data_file = open(f'./csv/{lang}.csv', 'w', newline='')
+        data_file.seek(0)
         csv_writer = csv.writer(data_file)
-
         count = 0
         for data in data:
             if count == 0:
@@ -356,6 +433,7 @@ def json_to_csv(lang_input):
                 count += 1
             csv_writer.writerow(data.values())
         data_file.close()
+        print(f'-------- {lang} JSON successfully converted into CSV --------')
 
 
 # setup credential for google drive access, requires token.json
@@ -439,34 +517,52 @@ def update(folder_id):
 def download(folder_id):
     creds = setup()
     files = query(creds, folder_id)
+    ct = datetime.datetime.now()
+    modified = False
     try:
         # create drive api client
         service = build('drive', 'v3', credentials=creds)    
         for file_id in files:
             request = service.files().export_media(fileId=file_id['id'], mimeType='text/csv')
             file = io.BytesIO()
+            name = file_id['name']
             downloader = MediaIoBaseDownload(file, request)
             done = False
             while done is False:
                 status, done = downloader.next_chunk()
-                print(f'Download {int(status.progress() * 100)}.')
+                # print(f'Downloading {name}: {int(status.progress() * 100)}%')
+            print(f'Downloaded {name} CSV')
             # save csv for update
             file.seek(0)
-            df = pd.read_csv(file)
-            df.to_csv('./csv/' + file_id['name'] + '.csv', index=False)
+            df = pd.read_csv(file, delimiter=',')
             # convert back into json
             updated = {}
             with open('./converted/' + file_id['name'] + '.json') as lang_file:
                 current = json.load(lang_file)
+                updated = current.copy()
             for _, row in df.iterrows():
+                # new location added
                 if row['Location'] not in updated.keys():
                     updated[row['Location']] = {}
+                if row['Name'] in ['TRUE', 'FALSE']:
+                    row['Name'] = row['Name'].lower()
+                # new term added
                 if row['Name'] not in updated[row['Location']].keys():
                     updated[row['Location']][row['Name']] = format_spacing(current[row['Location']][row['Name']], row['Value'])
+                # if value has been modified
+                if format_spacing(current[row['Location']][row['Name']], row['Value']) != current[row['Location']][row['Name']]:
+                    # update csv with timestamp
+                    ind = (df[(df['Location']  == row['Location']) & (df['Name'] == row['Name'])].index.tolist())[0]
+                    df.at[ind,'Timestamp'] = ct
+                    updated[row['Location']][row['Name']] = format_spacing(current[row['Location']][row['Name']], row['Value'])
+                    modified = True
+            df.to_csv('./csv/' + file_id['name'] + '.csv', index=False)
             with open('./converted/' + file_id['name'] + '.json', 'w') as output:
                 json.dump(updated, output, ensure_ascii=False, indent=4, sort_keys=True)
+        if modified:
+            update(folder_id)
     except HttpError as error:
-        print(F'An error occurred: {error}')
+        print(f'An error occurred: {error}')
         file = None
 
 
@@ -479,8 +575,10 @@ def main():
     # convert_file(args.src)
     # convert_xlf_to_json(args.src)
     # translate_files()
+    # remove_translation([['Z', 'z']])
     
     # folder_id as args 
-    # json_to_csv([])
+    # json_to_csv(langs)
+    # upload(args.src.name, langs)
     # update(args.src.name)
-    # download(args.src.name)
+    download(args.src.name)
